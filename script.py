@@ -2,6 +2,9 @@ import requests
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont
 import datetime
+import os
+
+os.chdir("/home/blame/workspace/calendar_generator")
 
 # ------------------------ Configuration ------------------------
 URL_HUANGLI = "https://www.huangli.com/huangli/"
@@ -15,8 +18,8 @@ OUTPUT_BINARY = "compressed_image.bin"
 # 定义颜色映射表（2 位表示一个像素）
 COLOR_MAP = {
     (255, 255, 255): 0b00,  # 白色
-    (0, 0, 0): 0b01,        # 黑色
-    (255, 0, 0): 0b10       # 红色
+    (0, 0, 0): 0b01,  # 黑色
+    (255, 0, 0): 0b10,  # 红色
 }
 
 
@@ -49,7 +52,7 @@ def parse_huangli_data(soup):
         "yi_list": "",
         "ji_list": "",
         "lunar_month": "",
-        "lunar_day": ""
+        "lunar_day": "",
     }
 
     # 提取公历日期
@@ -65,7 +68,9 @@ def parse_huangli_data(soup):
     data["lucky_constellation"] = data["lucky_constellation"].replace("今日星座：", "")
 
     # 提取宜事项
-    yi_items = soup.find("div", class_="yi").find("div", class_="day-yi").find_all("span")
+    yi_items = (
+        soup.find("div", class_="yi").find("div", class_="day-yi").find_all("span")
+    )
     data["yi_list"] = " ".join([item.text for item in yi_items])
 
     # 提取忌事项
@@ -112,11 +117,14 @@ def wrap_text_cn(text, font, max_width):
     line = ""
     for char in text:
         line_width = font.getlength(line + char)
-        if line_width <= max_width:
+        if line_width <= max_width and char != "\n":
             line += char
         else:
             wrapped_lines.append(line.strip())
-            line = char
+            if char != "\n":
+                line = char
+            else:
+                line = ""
     if line:
         wrapped_lines.append(line.strip())
     return wrapped_lines
@@ -157,6 +165,11 @@ def load_fonts():
     fonts["font_medium"] = font_medium
     fonts["font_small"] = font_small
     fonts["font_art"] = font_art
+    fonts["font_super_height"] = font_super_height
+    fonts["font_large_height"] = font_large_height
+    fonts["font_medium_height"] = font_medium_height
+    fonts["font_small_height"] = font_small_height
+    fonts["font_art_height"] = font_art_height
 
     return fonts
 
@@ -169,7 +182,7 @@ def create_calendar_image(
     ji_list,
     lunar_month,
     lunar_day,
-    today_text
+    today_text,
 ):
     """
     创建并绘制日历图片，返回 PIL.Image 对象。
@@ -186,14 +199,17 @@ def create_calendar_image(
     font_medium = fonts["font_medium"]
     font_small = fonts["font_small"]
     font_art = fonts["font_art"]
+    font_small_height = fonts["font_small_height"]
+    font_art_height = fonts["font_art_height"]
+    line_spacing = 4
 
     # 颜色定义
     header_bg_color = (255, 0, 0)  # 顶部背景颜色
-    text_color = (0, 0, 0)         # 黑色
-    yi_color = (255, 255, 255)     # 宜（白色）
-    ji_color = (255, 255, 255)     # 忌（白色）
-    yi_bg_color = (255, 0, 0)      # 红色
-    ji_bg_color = (0, 0, 0)        # 黑色
+    text_color = (0, 0, 0)  # 黑色
+    yi_color = (255, 255, 255)  # 宜（白色）
+    ji_color = (255, 255, 255)  # 忌（白色）
+    yi_bg_color = (255, 0, 0)  # 红色
+    ji_bg_color = (0, 0, 0)  # 黑色
 
     # 绘制顶部背景矩形
     draw.rectangle([0, 0, width, 50], fill=header_bg_color)
@@ -201,41 +217,80 @@ def create_calendar_image(
     # 去除 "(阳历)" 并绘制
     solar_date = solar_date.replace("(阳历)", "").strip()
     solar_date_width = font_medium.getlength(solar_date)
-    draw.text(((width - solar_date_width) // 2, 5), solar_date, fill=(255, 255, 255), font=font_medium)
+    draw.text(
+        ((width - solar_date_width) // 2, 5),
+        solar_date,
+        fill=(255, 255, 255),
+        font=font_medium,
+    )
 
     # 绘制幸运生肖和星座
     l_zodiac = "今日幸运生肖：" + lucky_zodiac
     draw.text((30, 30), l_zodiac, fill=(255, 255, 255), font=font_small)
     l_constellation = "今日星座：" + lucky_constellation
     lucky_constellation_width = font_small.getlength(l_constellation)
-    draw.text((width - lucky_constellation_width - 30, 30), l_constellation, fill=(255, 255, 255), font=font_small)
+    draw.text(
+        (width - lucky_constellation_width - 30, 30),
+        l_constellation,
+        fill=(255, 255, 255),
+        font=font_small,
+    )
 
     # 绘制农历月份和农历日期
     font_super_height = font_super.size  # 取当前 super 字体大小
     lunar_month_width = font_super.getlength(lunar_month)
     lunar_day_width = font_super.getlength(lunar_day)
 
-    draw.text(((width - lunar_month_width) / 2, 75), lunar_month, fill=text_color, font=font_super)
-    draw.text(((width - lunar_day_width) / 2, 75 + font_super_height), lunar_day, fill=text_color, font=font_super)
+    draw.text(
+        ((width - lunar_month_width) / 2, 75),
+        lunar_month,
+        fill=text_color,
+        font=font_super,
+    )
+    draw.text(
+        ((width - lunar_day_width) / 2, 75 + font_super_height),
+        lunar_day,
+        fill=text_color,
+        font=font_super,
+    )
+
+    bottom_of_lunar = 75 + 2 * font_super_height
 
     # 如果有 today_text 信息（如节日）
     if today_text:
         today_text_width = font_medium.getlength(today_text)
-        draw.text(((width - today_text_width) / 2, 75 + 2 * font_super_height + 10), today_text, fill=header_bg_color, font=font_medium)
+        draw.text(
+            ((width - today_text_width) / 2, 75 + 2 * font_super_height + 10),
+            today_text,
+            fill=header_bg_color,
+            font=font_medium,
+        )
+        bottom_of_lunar += font_medium.size + 10
 
     # 绘制“宜”圆形及其文本
     circle_yi_x, circle_yi_y = 75, 90
     draw.circle((circle_yi_x, circle_yi_y), font_large.size // 2 + 15, fill=yi_bg_color)
     yi_width = font_large.getlength("宜")
-    draw.text((circle_yi_x - yi_width // 2, circle_yi_y - font_large.size // 2), "宜", fill=yi_color, font=font_large)
+    draw.text(
+        (circle_yi_x - yi_width // 2, circle_yi_y - font_large.size // 2),
+        "宜",
+        fill=yi_color,
+        font=font_large,
+    )
 
     # 分行绘制宜事项
     wrapped_yi_list = wrap_text_cn(yi_list, font_small, 100)
+    start_y = circle_yi_y + font_large.size // 2 + 15 + 10
     draw.text(
-        (circle_yi_x - 50, circle_yi_y + font_large.size // 2 + 15 + 10),
+        (circle_yi_x - 50, start_y),
         "\n".join(wrapped_yi_list),
         fill=text_color,
-        font=font_small
+        font=font_small,
+    )
+    height_yi = (
+        start_y
+        + font_small_height * len(wrapped_yi_list)
+        + line_spacing * (len(wrapped_yi_list) - 1)
     )
 
     # 绘制“忌”圆形及其文本
@@ -243,39 +298,94 @@ def create_calendar_image(
     circle_ji_y = circle_yi_y
     draw.circle((circle_ji_x, circle_ji_y), font_large.size // 2 + 15, fill=ji_bg_color)
     ji_width = font_large.getlength("忌")
-    draw.text((circle_ji_x - ji_width // 2, circle_ji_y - font_large.size // 2), "忌", fill=ji_color, font=font_large)
+    draw.text(
+        (circle_ji_x - ji_width // 2, circle_ji_y - font_large.size // 2),
+        "忌",
+        fill=ji_color,
+        font=font_large,
+    )
 
     # 分行绘制忌事项
     wrapped_ji_list = wrap_text_cn(ji_list, font_small, 100)
     draw.text(
-        (circle_ji_x - 50, circle_ji_y + font_large.size // 2 + 15 + 10),
+        (circle_ji_x - 50, start_y),
         "\n".join(wrapped_ji_list),
         fill=text_color,
-        font=font_small
+        font=font_small,
     )
+    height_ji = (
+        start_y
+        + font_small_height * len(wrapped_ji_list)
+        + line_spacing * (len(wrapped_ji_list) - 1)
+    )
+    last_height = max(height_yi, height_ji, bottom_of_lunar)
 
     # 判断是否是周末
     today = datetime.datetime.now()
+    box_y_start = last_height + font_small_height
     if today.weekday() in [5, 6]:
         # 周末
         try:
             img_weekend = Image.open(ASSETS_WEEKEND)
             img_weekend = img_weekend.convert("1")
-            image.paste(img_weekend, (50, 200))
-            draw.text((50 + img_weekend.width + 40, 220), "是谁在加班？\n温暖了寂寞！", fill=text_color, font=font_art)
+            image.paste(img_weekend, (50, box_y_start + font_small_height // 2))
+            draw.text(
+                (
+                    50 + img_weekend.width + 40,
+                    box_y_start
+                    + font_small_height // 2
+                    + img_weekend.height // 2
+                    - font_art_height,
+                ),
+                "是谁在加班？\n温暖了寂寞！",
+                fill=text_color,
+                font=font_art,
+            )
         except IOError:
             print("周末提示图片不存在或无法打开。")
     else:
         # 非周末，去 hitokoto 接口
-        resp = requests.get("https://v1.hitokoto.cn/?c=l&c=j&encode=text")
+        resp = requests.get("https://v1.hitokoto.cn/?encode=text")
         if resp.status_code == 200:
             hitokoto = resp.text.strip()
             lines = wrap_text_cn(hitokoto, font_art, 320)
             if len(lines) > 1:
-                draw.text((40, 200), "\n".join(lines), fill=text_color, font=font_art)
+                y_position = ((height - 5) + box_y_start) // 2 - (
+                    # fontsize the spacing between lines: 4
+                    font_art_height * len(lines)
+                    + line_spacing * (len(lines) - 1)
+                ) // 2
+                draw.text(
+                    (40, y_position),
+                    "\n".join(lines),
+                    fill=text_color,
+                    font=font_art,
+                )
             else:
                 text_width = font_art.getlength(lines[0])
-                draw.text(((width - text_width) / 2, 250), lines[0], fill=text_color, font=font_art)
+                draw.text(
+                    (
+                        (width - text_width) / 2,
+                        ((height - 5) + box_y_start) // 2 - font_art_height // 2,
+                    ),
+                    lines[0],
+                    fill=text_color,
+                    font=font_art,
+                )
+    # draw a double rectangle box
+    draw.rounded_rectangle(
+        [5, box_y_start, width - 5, height - 5],
+        radius=10,
+        outline=(255, 0, 0),
+        width=3,
+    )
+    draw.rounded_rectangle(
+        [10, box_y_start + 5, width - 10, height - 10],
+        radius=10,
+        outline=(255, 0, 0),
+    )
+
+    draw.rectangle([0, 0, width, height], outline=(255, 0, 0), width=3)
 
     return image
 
@@ -310,7 +420,7 @@ def bmp_to_compressed_binary(image_path, output_path, threshold=128):
         for x in range(width):
             color_bits = COLOR_MAP[pixels[x, y]]
             # 将颜色编码移到正确的位置，每个像素占 2 位
-            current_byte |= (color_bits << (6 - bit_position))
+            current_byte |= color_bits << (6 - bit_position)
             bit_position += 2
 
             if bit_position == 8:
@@ -363,7 +473,7 @@ def main():
         huangli_data["ji_list"],
         huangli_data["lunar_month"],
         huangli_data["lunar_day"],
-        today_text
+        today_text,
     )
 
     # 保存并压缩
